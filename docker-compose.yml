@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscaled
+    volumes:
+      - /var/lib:/var/lib
+      - /dev/net/tun:/dev/net/tun
+      - /var/lib/tailscale:/var/lib/tailscale
+    environment:
+      - TS_STATE_DIR=/var/lib/tailscale
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+  adguardhome:
+    image: adguard/adguardhome:latest
+    container_name: adguardhome
+    network_mode: host
+    volumes:
+      - adguardhome-work:/opt/adguardhome/work
+      - adguardhome-conf:/opt/adguardhome/conf
+    restart: unless-stopped
+  dlna:
+    image: vladgh/minidlna:latest
+    container_name: minidlna
+    restart: unless-stopped
+    volumes:
+      - /mnt/dietpi_userdata/Video:/media/movies
+    network_mode: host
+    environment:
+      MINIDLNA_MEDIA_DIR: /media/movies
+      MINIDLNA_FRIENDLY_NAME: MiniDlna
+
+  transmission:
+    image: lscr.io/linuxserver/transmission:latest
+    container_name: transmission
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Singapore
+    volumes:
+      - transmission:/config
+      - /mnt/dietpi_userdata/Video:/downloads
+    ports:
+      - 9091:9091
+      - 51413:51413
+      - 51413:51413/udp
+    restart: unless-stopped
+
+  cops:
+    image: lscr.io/linuxserver/cops:latest
+    container_name: cops
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Singapore
+    volumes:
+      - cops-config:/config
+      - cops-library:/books #metadata.db location
+    ports:
+      - 8989:80
+    restart: unless-stopped
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    volumes:
+      - uptime-kuma:/app/data
+    ports:
+      - 3001:3001
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus
+    restart: unless-stopped
+    ports:
+    - '9090:9090'
+    volumes:
+    - prometheus:/etc/prometheus:ro
+    container_name: prometheus
+
+  grafana:
+    image: grafana/grafana-enterprise
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+    - '3100:3000'
+    volumes:
+    - grafana:/var/lib/grafana
+
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    environment:
+      PUID: 1000
+      PGID: 1000
+    ports:
+    - 3030:3000
+    dns:
+    - 127.0.0.1
+    - 192.168.1.99
+    volumes:
+    - homepage:/app/config # Make sure your local config directory exists
+    - homepage_icons:/app/public/icons #for storing icons on local
+    - /var/run/docker.sock:/var/run/docker.sock:ro # optional, for docker integrations
+    restart: unless-stopped
+
+  dockerproxy:
+    image: ghcr.io/tecnativa/docker-socket-proxy:latest
+    container_name: homepage-dockerproxy
+    environment:
+    - CONTAINERS=1 # Allow access to viewing containers
+    - SERVICES=1 # Allow access to viewing services (necessary when using Docker Swarm)
+    - TASKS=1 # Allow access to viewing tasks (necessary when using Docker Swarm)
+    - POST=0 # Disallow any POST operations (effectively read-only)
+    ports:
+    - 127.0.0.1:2375:2375
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock:ro # Mounted as read-only
+    restart: unless-stopped
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    ports:
+    - 9443:9443
+    volumes:
+    - portainer:/data
+    - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  uptime-kuma: #backup
+  prometheus:  #backup
+  grafana:  #no need to backup
+  homepage: #backup
+  homepage_icons: #backup
+  portainer:    #no need to backup
+  cops-config:  #no need to backup
+  cops-library: #no need to backup
+  transmission: #no need to backup
+  adguardhome-work: #no need to backup
+  adguardhome-conf: #no need to backup
